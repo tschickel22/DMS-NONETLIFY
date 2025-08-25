@@ -1,0 +1,42 @@
+# Node & build artifacts
+node_modules/
+dist/
+.vite/
+build/
+out/
+.next/
+.nuxt/
+.parcel-cache/
+.rollup.cache/
+.svelte-kit/
+.turbo/
+.vercel/
+.yarn/
+.pnpm-store/
+.cache/
+coverage/
+.nyc_output/
+
+# Env files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+*.pnpm-debug.log*
+
+# Editors / OS
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+
+# Bolt / Netlify remnants
+.netlify/
+.bolt/

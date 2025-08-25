@@ -1,0 +1,92 @@
+{
+  "name": "renter-insight",
+  "version": "1",
+  "apps": [
+    {
+      "name": "agreement-vault",
+      "root": "apps/agreement-vault",
+      "build": "vite build",
+      "dist": "dist",
+      "preview": "vite preview"
+    },
+    {
+      "name": "client-portal",
+      "root": "apps/client-portal",
+      "build": "vite build",
+      "dist": "dist",
+      "preview": "vite preview"
+    },
+    {
+      "name": "commission-engine",
+      "root": "apps/commission-engine",
+      "build": "vite build",
+      "dist": "dist",
+      "preview": "vite preview"
+    },
+    {
+      "name": "company-settings",
+      "root": "apps/company-settings",
+      "build": "vite build",
+      "dist": "dist",
+      "preview": "vite preview"
+    },
+    {
+      "name": "crm-prospecting",
+      "root": "apps/crm-prospecting",
+      "build": "vite build",
+      "dist": "dist",
+      "preview": "vite preview"
+    },
+    {
+      "name": "delivery-tracker",
+      "root": "apps/delivery-tracker",
+      "build": "vite build",
+      "dist": "dist",
+      "preview": "vite preview"
+    },
+    {
+      "name": "inventory-management",
+      "root": "apps/inventory-management",
+      "build": "vite build",
+      "dist": "dist",
+      "preview": "vite preview"
+    },
+    {
+      "name": "invoice-payments",
+      "root": "apps/invoice-payments",
+      "build": "vite build",
+      "dist": "dist",
+      "preview": "vite preview"
+    },
+    {
+      "name": "platform-admin",
+      "root": "apps/platform-admin",
+      "build": "vite build",
+      "dist": "dist",
+      "preview": "vite preview"
+    },
+    {
+      "name": "quote-builder",
+      "root": "apps/quote-builder",
+      "build": "vite build",
+      "dist": "dist",
+      "preview": "vite preview"
+    },
+    {
+      "name": "reporting-suite",
+      "root": "apps/reporting-suite",
+      "build": "vite build",
+      "dist": "dist",
+      "preview": "vite preview"
+    },
+    {
+      "name": "service-ops",
+      "root": "apps/service-ops",
+      "build": "vite build",
+      "dist": "dist",
+      "preview": "vite preview"
+    }
+  ],
+  "spa": true,
+  "apiDir": "api"
+}

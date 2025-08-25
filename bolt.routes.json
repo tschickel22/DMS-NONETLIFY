@@ -1,0 +1,20 @@
+{
+  "routes": [
+    {
+      "src": "^/\\.netlify/functions/(.*)$",
+      "dest": "/api/netlify/$1"
+    },
+    {
+      "src": "^/api/(.*)$",
+      "dest": "/api/$1"
+    },
+    {
+      "src": "^/s/[^/]+/(.*)$",
+      "dest": "/index.html"
+    },
+    {
+      "src": "^(?!/api/).*$",
+      "dest": "/index.html"
+    }
+  ]
+}
