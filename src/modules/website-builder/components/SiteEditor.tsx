@@ -68,41 +68,45 @@ export default function PageList({
     seoDescription: ''
   })
 
-  // Resolve current & editing pages
+  // Normalize/guard against undefined or non-array inputs
+  const safePages: Page[] = Array.isArray(pages) ? pages : []
+
+  // Resolve current & editing pages safely
   const currentPage = useMemo(
-    () => pages.find((p) => p.id === currentPageId),
-    [pages, currentPageId]
+    () => safePages.find((p) => p?.id === currentPageId),
+    [safePages, currentPageId]
   )
   const editingPage = useMemo(
-    () => pages.find((p) => p.id === editingPageId) || null,
-    [pages, editingPageId]
+    () => safePages.find((p) => p?.id === editingPageId) || null,
+    [safePages, editingPageId]
   )
 
   // Auto-select first page if none selected and pages exist
   useEffect(() => {
-    if (!currentPageId && pages.length > 0) {
-      onSelectPage(pages[0].id)
+    if (!currentPageId && safePages.length > 0) {
+      onSelectPage(safePages[0].id)
     }
-  }, [currentPageId, pages, onSelectPage])
+  }, [currentPageId, safePages, onSelectPage])
 
   const filteredPages = useMemo(() => {
     const q = searchTerm.trim().toLowerCase()
-    if (!q) return pages
-    return pages.filter(
-      (page) =>
-        page.name.toLowerCase().includes(q) ||
-        page.slug.toLowerCase().includes(q)
-    )
-  }, [pages, searchTerm])
+    if (!q) return safePages
+    return safePages.filter((page) => {
+      const name = (page?.name ?? '').toString().toLowerCase()
+      const slug = (page?.slug ?? '').toString().toLowerCase()
+      return name.includes(q) || slug.includes(q)
+    })
+  }, [safePages, searchTerm])
 
   const getPageIcon = (page: Page) =>
-    page.isHomePage ? <Home className="h-4 w-4" /> : <FileText className="h-4 w-4" />
+    page?.isHomePage ? <Home className="h-4 w-4" /> : <FileText className="h-4 w-4" />
 
   const startEditing = (page: Page) => {
     setEditingPageId(page.id)
+    const slug = (page.slug ?? '').toString()
     setEditForm({
-      title: page.name,
-      path: page.slug.startsWith('/') ? page.slug : `/${page.slug}`,
+      title: page.name ?? '',
+      path: slug.startsWith('/') ? slug : `/${slug}`,
       seoTitle: page.seo?.title ?? '',
       seoDescription: page.seo?.description ?? ''
     })
@@ -112,8 +116,8 @@ export default function PageList({
     if (!editingPageId || !onPageUpdate) return
 
     // Normalize slug/path
-    let path = editForm.path.trim()
-    if (!path.startsWith('/')) path = `/${path}`
+    let path = (editForm.path ?? '').trim()
+    if (path && !path.startsWith('/')) path = `/${path}`
     path = path.replace(/[^a-zA-Z0-9\-_\/]/g, '-').replace(/--+/g, '-')
 
     onPageUpdate(editingPageId, {
@@ -128,6 +132,19 @@ export default function PageList({
   }
 
   const cancelEditing = () => setEditingPageId(null)
+
+  const formatModified = (value: string | undefined) => {
+    if (!value) return '—'
+    const d = new Date(value)
+    // Avoid RangeError: Invalid time value
+    return isNaN(d.getTime()) ? '—' : d.toLocaleDateString()
+  }
+
+  const pageSlugDisplay = (slug?: string) => {
+    const s = (slug ?? '').toString()
+    if (!s) return '/'
+    return s.startsWith('/') ? s : `/${s}`
+  }
 
   return (
     <div className="space-y-4">
@@ -182,25 +199,25 @@ export default function PageList({
                     <div className="text-muted-foreground">{getPageIcon(page)}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <h4 className="font-medium truncate">{page.name}</h4>
-                        {page.isHomePage && (
+                        <h4 className="font-medium truncate">{page?.name ?? ''}</h4>
+                        {page?.isHomePage && (
                           <Badge variant="secondary" className="text-xs">
                             Home
                           </Badge>
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground truncate">
-                        {page.slug?.startsWith('/') ? page.slug : `/${page.slug}`}
+                        {pageSlugDisplay(page?.slug)}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Modified {new Date(page.lastModified).toLocaleDateString()}
+                        Modified {formatModified(page?.lastModified)}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Badge variant={page.isPublished ? 'default' : 'secondary'} className="text-xs">
-                      {page.isPublished ? 'Published' : 'Draft'}
+                    <Badge variant={page?.isPublished ? 'default' : 'secondary'} className="text-xs">
+                      {page?.isPublished ? 'Published' : 'Draft'}
                     </Badge>
 
                     <DropdownMenu>
@@ -241,7 +258,7 @@ export default function PageList({
                           <FileText className="h-4 w-4 mr-2" />
                           Duplicate
                         </DropdownMenuItem>
-                        {!page.isHomePage && (
+                        {!page?.isHomePage && (
                           <DropdownMenuItem
                             onClick={(e) => {
                               e.stopPropagation()
@@ -264,10 +281,10 @@ export default function PageList({
       </div>
 
       {/* Quick Stats */}
-      {pages.length > 0 && (
+      {safePages.length > 0 && (
         <div className="text-xs text-muted-foreground pt-2 border-t">
-          {pages.length} page{pages.length !== 1 ? 's' : ''} •{' '}
-          {pages.filter((p) => p.isPublished).length} published
+          {safePages.length} page{safePages.length !== 1 ? 's' : ''} •{' '}
+          {safePages.filter((p) => p?.isPublished).length} published
         </div>
       )}
 
@@ -288,7 +305,7 @@ export default function PageList({
                 value={currentPage.seo?.title || ''}
                 onChange={(e) =>
                   onPageUpdate?.(currentPage.id, {
-                    seo: { ...currentPage.seo, title: e.target.value }
+                    seo: { ...(currentPage.seo ?? {}), title: e.target.value }
                   })
                 }
                 placeholder="Page title for search engines"
@@ -304,7 +321,7 @@ export default function PageList({
                 value={currentPage.seo?.description || ''}
                 onChange={(e) =>
                   onPageUpdate?.(currentPage.id, {
-                    seo: { ...currentPage.seo, description: e.target.value }
+                    seo: { ...(currentPage.seo ?? {}), description: e.target.value }
                   })
                 }
                 placeholder="Brief description for search results"
