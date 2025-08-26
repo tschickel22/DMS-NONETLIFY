@@ -1,0 +1,158 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: ChatGPT <devnull@example.com>
+Date: 2025-08-26 15:27:46 UTC
+Subject: [PATCH] Netlify compat: rewrite /.netlify/functions -> /api/netlify; add http helpers; update routes
+
+---
+ bolt.routes.json                 | 8 +
+ shared-core/http.ts              | 60 +
+ shared-core/netlifyCompat.ts     | 41 +
+ apps/website-builder/src/main.tsx| 2 +-
+ apps/inventory-management/src/main.tsx| 2 +-
+ apps/company-settings/src/main.tsx| 2 +-
+ 6 files changed, 112 insertions(+), 3 deletions(-)
+
+diff --git a/bolt.routes.json b/bolt.routes.json
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/bolt.routes.json
+@@ -0,0 +8 @@
++{
+  "routes": [
+    { "src": "^/\\.netlify/functions/(.*)$", "dest": "/api/netlify/$1" },
+    { "src": "^/api/(.*)$", "dest": "/api/$1" },
+    { "src": "^/s/[^/]+/(.*)$", "dest": "/index.html" },
+    { "src": "^(?!/api/).*$", "dest": "/index.html" }
+  ]
+}
+diff --git a/shared-core/http.ts b/shared-core/http.ts
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/shared-core/http.ts
+@@ -0,0 +60 @@
++// shared-core/http.ts
+// Lightweight JSON & upload helpers with a safe default API base.
+// By default we talk to Bolt wrappers at /api/netlify unless VITE_FUNCTIONS_BASE overrides.
+
+const API_BASE =
+  (typeof import.meta !== 'undefined' && (import.meta as any)?.env?.VITE_FUNCTIONS_BASE) || '/api/netlify';
+
+type HeadersLike = Record<string, string>;
+
+function toHeaders(h?: HeadersLike): Headers {
+  const out = new Headers();
+  if (h) {
+    for (const [k, v] of Object.entries(h)) out.set(k, String(v));
+  }
+  return out;
+}
+
+async function parseJSON<T = any>(res: Response): Promise<T> {
+  const text = await res.text();
+  try {
+    return text ? JSON.parse(text) : ({} as any);
+  } catch {
+    // If server accidentally returned text, surface it for easier debugging
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+}
+
+async function request<T = any>(method: string, path: string, body?: any, headers?: HeadersLike): Promise<T> {
+  const url = path.startsWith('http') ? path : `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+  const h = toHeaders(headers);
+  const init: RequestInit = { method, headers: h, credentials: 'include' };
+
+  if (body != null && !(body instanceof FormData)) {
+    if (!h.has('Content-Type')) h.set('Content-Type', 'application/json');
+    init.body = JSON.stringify(body);
+  } else if (body instanceof FormData) {
+    init.body = body; // let browser set multipart boundary
+  }
+
+  const res = await fetch(url, init);
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(errText || `${res.status} ${res.statusText}`);
+  }
+  // Try JSON first, fall back to text
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) return parseJSON<T>(res);
+  return (await res.text()) as any;
+}
+
+export const http = {
+  get: <T = any>(path: string, headers?: HeadersLike) => request<T>('GET', path, undefined, headers),
+  post: <T = any>(path: string, body?: any, headers?: HeadersLike) => request<T>('POST', path, body, headers),
+  put:  <T = any>(path: string, body?: any, headers?: HeadersLike) => request<T>('PUT', path, body, headers),
+  patch:<T = any>(path: string, body?: any, headers?: HeadersLike) => request<T>('PATCH', path, body, headers),
+  del:  <T = any>(path: string, headers?: HeadersLike) => request<T>('DELETE', path, undefined, headers),
+  upload:<T = any>(path: string, form: FormData, headers?: HeadersLike) => request<T>('POST', path, form, headers),
+};
+
+export { API_BASE };
+diff --git a/shared-core/netlifyCompat.ts b/shared-core/netlifyCompat.ts
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/shared-core/netlifyCompat.ts
+@@ -0,0 +41 @@
++// shared-core/netlifyCompat.ts
+// Global fetch shim to rewrite calls that still target Netlify endpoints.
+// Any same-origin URL with path "/.netlify/functions/*" is rewritten to "/api/netlify/*".
+// Import this once in each app entry file (e.g., apps/*/src/main.tsx).
+
+if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+  const originalFetch = window.fetch.bind(window);
+
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    let req = input as any;
+    try {
+      let urlStr: string | null = null;
+
+      if (typeof req === 'string') {
+        urlStr = req;
+      } else if (req instanceof URL) {
+        urlStr = req.toString();
+      } else if (req && typeof req.url === 'string') {
+        urlStr = req.url;
+      }
+
+      if (urlStr) {
+        const u = new URL(urlStr, window.location.origin);
+        // Only rewrite same-origin requests
+        if (u.origin === window.location.origin && u.pathname.startsWith('/.netlify/functions/')) {
+          u.pathname = u.pathname.replace('/.netlify/functions/', '/api/netlify/');
+          const newUrl = u.toString();
+          if (req instanceof Request) {
+            req = new Request(newUrl, req);
+          } else {
+            req = newUrl;
+          }
+        }
+      }
+
+      return await originalFetch(req, init as any);
+    } catch (err) {
+      return Promise.reject(err);
+    }
+  };
+}
+diff --git a/apps/website-builder/src/main.tsx b/apps/website-builder/src/main.tsx
+--- a/apps/website-builder/src/main.tsx
++++ b/apps/website-builder/src/main.tsx
+@@ -1 +1,2 @@
++import '../../shared-core/netlifyCompat'
+diff --git a/apps/inventory-management/src/main.tsx b/apps/inventory-management/src/main.tsx
+--- a/apps/inventory-management/src/main.tsx
++++ b/apps/inventory-management/src/main.tsx
+@@ -1 +1,2 @@
++import '../../shared-core/netlifyCompat'
+diff --git a/apps/company-settings/src/main.tsx b/apps/company-settings/src/main.tsx
+--- a/apps/company-settings/src/main.tsx
++++ b/apps/company-settings/src/main.tsx
+@@ -1 +1,2 @@
++import '../../shared-core/netlifyCompat'
+-- 
+2.39.3
