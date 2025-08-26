@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+// src/modules/company-settings/components/WarrantySettings.tsx
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -8,12 +9,12 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  Shield, 
-  Building, 
-  Users, 
-  Mail, 
-  Plus, 
+import {
+  Shield,
+  Building,
+  Users,
+  Mail,
+  Plus,
   X,
   AlertCircle,
   CheckCircle,
@@ -22,38 +23,85 @@ import {
 
 interface WarrantySettingsProps {
   settings: any;
-  onSettingsChange: (settings: any) => void;
+  onSettingsChange?: (settings: any) => void; // made optional; we guard calls
 }
 
-export default function WarrantySettings({ 
-  settings, 
-  onSettingsChange 
+const DEFAULT_WARRANTY = {
+  companyInfo: {
+    dealershipName: '',
+    contactPerson: '',
+    contactEmail: '',
+    contactPhone: '',
+    dealerNumber: ''
+  },
+  customManufacturers: [] as Array<any>,
+  approvalWorkflow: {
+    requireManagerApproval: false,
+    managerApprovalThreshold: 1000,
+    autoApproveUnder: 250
+  },
+  emailTemplates: {
+    claimSubmissionTemplate: '',
+    approvalNotificationTemplate: '',
+    denialNotificationTemplate: ''
+  },
+  preferences: {
+    defaultApprovalTimeout: 72, // hours
+    enableAutomaticFollowup: true,
+    followupInterval: 24 // hours
+  }
+};
+
+export default function WarrantySettings({
+  settings,
+  onSettingsChange
 }: WarrantySettingsProps) {
-  const [localSettings, setLocalSettings] = useState(settings?.warranty || {
-    companyInfo: {
-      dealershipName: '',
-      contactPerson: '',
-      contactEmail: '',
-      contactPhone: '',
-      dealerNumber: ''
+  const initial = useMemo(
+    () => (settings?.warranty ? { ...DEFAULT_WARRANTY, ...settings.warranty } : { ...DEFAULT_WARRANTY }),
+    [settings]
+  );
+
+  const [localSettings, setLocalSettings] = useState(initial);
+
+  // keep local in sync if parent settings change
+  useEffect(() => {
+    setLocalSettings((prev) => {
+      const next = settings?.warranty ? { ...DEFAULT_WARRANTY, ...settings.warranty } : { ...DEFAULT_WARRANTY };
+      // avoid unnecessary re-renders
+      return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+    });
+  }, [settings]);
+
+  const isFn = (v: any): v is (s: any) => void => typeof v === 'function';
+
+  const notifyParent = useCallback(
+    (updatedWarranty: any) => {
+      if (isFn(onSettingsChange)) {
+        try {
+          onSettingsChange({ ...settings, warranty: updatedWarranty });
+        } catch (err) {
+          // don't crash UI if parent handler throws
+          console.error('onSettingsChange threw:', err);
+        }
+      }
     },
-    customManufacturers: [],
-    approvalWorkflow: {
-      requireManagerApproval: false,
-      managerApprovalThreshold: 1000,
-      autoApproveUnder: 250
-    },
-    emailTemplates: {
-      claimSubmissionTemplate: '',
-      approvalNotificationTemplate: '',
-      denialNotificationTemplate: ''
-    },
-    preferences: {
-      defaultApprovalTimeout: 72, // hours
-      enableAutomaticFollowup: true,
-      followupInterval: 24 // hours
+    [onSettingsChange, settings]
+  );
+
+  const updateSetting = useCallback((path: string, value: any) => {
+    const keys = path.split('.');
+    const updated = { ...localSettings };
+    let current: any = updated;
+
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (!current[keys[i]] || typeof current[keys[i]] !== 'object') current[keys[i]] = {};
+      current = current[keys[i]];
     }
-  });
+
+    current[keys[keys.length - 1]] = value;
+    setLocalSettings(updated);
+    notifyParent(updated);
+  }, [localSettings, notifyParent]);
 
   const [newManufacturer, setNewManufacturer] = useState({
     name: '',
@@ -61,26 +109,14 @@ export default function WarrantySettings({
     approvalThreshold: 500
   });
 
-  const updateSetting = (path: string, value: any) => {
-    const keys = path.split('.');
-    const updated = { ...localSettings };
-    let current = updated;
-    
-    for (let i = 0; i < keys.length - 1; i++) {
-      if (!current[keys[i]]) current[keys[i]] = {};
-      current = current[keys[i]];
-    }
-    
-    current[keys[keys.length - 1]] = value;
-    setLocalSettings(updated);
-    onSettingsChange({ ...settings, warranty: updated });
-  };
-
   const addCustomManufacturer = () => {
     if (newManufacturer.name.trim()) {
       const currentManufacturers = localSettings.customManufacturers || [];
       const manufacturerWithId = {
         ...newManufacturer,
+        approvalThreshold: Number.isFinite(Number(newManufacturer.approvalThreshold))
+          ? Number(newManufacturer.approvalThreshold)
+          : 500,
         id: `custom-${Date.now()}`,
         isCustom: true
       };
@@ -91,8 +127,13 @@ export default function WarrantySettings({
 
   const removeCustomManufacturer = (index: number) => {
     const currentManufacturers = localSettings.customManufacturers || [];
-    const updated = currentManufacturers.filter((_, i) => i !== index);
+    const updated = currentManufacturers.filter((_: any, i: number) => i !== index);
     updateSetting('customManufacturers', updated);
+  };
+
+  const toInt = (v: string, fallback = 0) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
   };
 
   return (
@@ -187,7 +228,7 @@ export default function WarrantySettings({
               <Label>Your Custom Manufacturers</Label>
               <div className="space-y-2">
                 {localSettings.customManufacturers.map((manufacturer: any, index: number) => (
-                  <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div key={manufacturer?.id ?? index} className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex-1">
                       <div className="font-medium">{manufacturer.name}</div>
                       <div className="text-sm text-gray-500">
@@ -230,7 +271,12 @@ export default function WarrantySettings({
                   placeholder="Threshold"
                   type="number"
                   value={newManufacturer.approvalThreshold}
-                  onChange={(e) => setNewManufacturer({ ...newManufacturer, approvalThreshold: parseInt(e.target.value) })}
+                  onChange={(e) =>
+                    setNewManufacturer({
+                      ...newManufacturer,
+                      approvalThreshold: toInt(e.target.value, 500)
+                    })
+                  }
                 />
                 <Button onClick={addCustomManufacturer} size="sm">
                   <Plus className="w-4 h-4" />
@@ -261,7 +307,7 @@ export default function WarrantySettings({
               </p>
             </div>
             <Switch
-              checked={localSettings.approvalWorkflow?.requireManagerApproval}
+              checked={!!localSettings.approvalWorkflow?.requireManagerApproval}
               onCheckedChange={(checked) => updateSetting('approvalWorkflow.requireManagerApproval', checked)}
             />
           </div>
@@ -272,8 +318,10 @@ export default function WarrantySettings({
                 <Label>Manager Approval Threshold</Label>
                 <Input
                   type="number"
-                  value={localSettings.approvalWorkflow?.managerApprovalThreshold || 1000}
-                  onChange={(e) => updateSetting('approvalWorkflow.managerApprovalThreshold', parseInt(e.target.value))}
+                  value={localSettings.approvalWorkflow?.managerApprovalThreshold ?? 1000}
+                  onChange={(e) =>
+                    updateSetting('approvalWorkflow.managerApprovalThreshold', toInt(e.target.value, 1000))
+                  }
                   className="w-32"
                 />
                 <p className="text-sm text-gray-500">
@@ -285,8 +333,8 @@ export default function WarrantySettings({
                 <Label>Auto-Approve Under</Label>
                 <Input
                   type="number"
-                  value={localSettings.approvalWorkflow?.autoApproveUnder || 250}
-                  onChange={(e) => updateSetting('approvalWorkflow.autoApproveUnder', parseInt(e.target.value))}
+                  value={localSettings.approvalWorkflow?.autoApproveUnder ?? 250}
+                  onChange={(e) => updateSetting('approvalWorkflow.autoApproveUnder', toInt(e.target.value, 250))}
                   className="w-32"
                 />
                 <p className="text-sm text-gray-500">
@@ -358,8 +406,8 @@ export default function WarrantySettings({
             <Label>Default Approval Timeout (hours)</Label>
             <Input
               type="number"
-              value={localSettings.preferences?.defaultApprovalTimeout || 72}
-              onChange={(e) => updateSetting('preferences.defaultApprovalTimeout', parseInt(e.target.value))}
+              value={localSettings.preferences?.defaultApprovalTimeout ?? 72}
+              onChange={(e) => updateSetting('preferences.defaultApprovalTimeout', toInt(e.target.value, 72))}
               className="w-32"
             />
             <p className="text-sm text-gray-500">
@@ -375,7 +423,7 @@ export default function WarrantySettings({
               </p>
             </div>
             <Switch
-              checked={localSettings.preferences?.enableAutomaticFollowup}
+              checked={!!localSettings.preferences?.enableAutomaticFollowup}
               onCheckedChange={(checked) => updateSetting('preferences.enableAutomaticFollowup', checked)}
             />
           </div>
@@ -385,8 +433,8 @@ export default function WarrantySettings({
               <Label>Follow-up Interval (hours)</Label>
               <Input
                 type="number"
-                value={localSettings.preferences?.followupInterval || 24}
-                onChange={(e) => updateSetting('preferences.followupInterval', parseInt(e.target.value))}
+                value={localSettings.preferences?.followupInterval ?? 24}
+                onChange={(e) => updateSetting('preferences.followupInterval', toInt(e.target.value, 24))}
                 className="w-32"
               />
               <p className="text-sm text-gray-500">
