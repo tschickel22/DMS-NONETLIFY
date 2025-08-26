@@ -1,22 +1,26 @@
 import React, { useState, useEffect } from 'react'
-import { Routes, Route, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Plus, Globe, Settings, Trash2, Edit } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Plus, Globe, Edit, Trash2, Eye } from 'lucide-react'
 import { websiteService } from '@/services/website/service'
 import { Site } from './types'
 import { useErrorHandler } from '@/hooks/useErrorHandler'
 import { useToast } from '@/hooks/use-toast'
-import SiteEditor from './components/SiteEditor'
-import CreateSiteModal from './components/CreateSiteModal'
+import TemplateSelector from './components/TemplateSelector'
+import { CreateSiteDetailsModal } from './components/CreateSiteDetailsModal'
 
 interface WebsiteBuilderProps {
   mode?: 'platform' | 'company'
 }
 
-function SitesList({ mode, onCreateSite }: { mode: 'platform' | 'company', onCreateSite: () => void }) {
+export default function WebsiteBuilder({ mode = 'platform' }: WebsiteBuilderProps) {
   const [sites, setSites] = useState<Site[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null)
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false)
+  const [showDetailsModal, setShowDetailsModal] = useState(false)
   const navigate = useNavigate()
   const { handleError } = useErrorHandler()
   const { toast } = useToast()
@@ -37,6 +41,61 @@ function SitesList({ mode, onCreateSite }: { mode: 'platform' | 'company', onCre
     }
   }
 
+  // NEW WORKFLOW HANDLERS
+  const handleCreateWebsiteClick = () => {
+    setShowTemplateSelector(true)
+  }
+
+  const handleTemplateSelected = (template: any) => {
+    setSelectedTemplate(template)
+    setShowTemplateSelector(false)
+    setShowDetailsModal(true)
+  }
+
+  const handleBackToTemplateSelection = () => {
+    setShowDetailsModal(false)
+    setShowTemplateSelector(true)
+  }
+
+  const handleCancelWorkflow = () => {
+    setSelectedTemplate(null)
+    setShowTemplateSelector(false)
+    setShowDetailsModal(false)
+  }
+
+  const handleCreateSite = async (siteData: { name: string; subdomain?: string; templateId: string; template?: any }) => {
+    try {
+      if (!selectedTemplate) {
+        throw new Error('No template selected')
+      }
+
+      const newSite = await websiteService.createSite({
+        name: siteData.name,
+        slug: siteData.subdomain || siteData.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        template: selectedTemplate,
+        pages: selectedTemplate.pages || [],
+        theme: selectedTemplate.theme,
+        nav: selectedTemplate.nav,
+        brand: selectedTemplate.brand
+      })
+
+      toast({
+        title: 'Website Created',
+        description: `${newSite.name} has been created successfully`
+      })
+
+      // Reset workflow state
+      handleCancelWorkflow()
+      
+      // Reload sites and navigate to editor
+      await loadSites()
+      const basePath = mode === 'platform' ? '/platform/website-builder' : '/company/settings/website'
+      navigate(`${basePath}/${newSite.id}`)
+    } catch (error) {
+      handleError(error, 'creating website')
+    }
+  }
+
   const handleEditSite = (siteId: string) => {
     const basePath = mode === 'platform' ? '/platform/website-builder' : '/company/settings/website'
     navigate(`${basePath}/${siteId}`)
@@ -44,57 +103,94 @@ function SitesList({ mode, onCreateSite }: { mode: 'platform' | 'company', onCre
 
   const handleDeleteSite = async (siteId: string) => {
     if (!confirm('Are you sure you want to delete this website?')) return
-    
+
     try {
       await websiteService.deleteSite(siteId)
-      toast({ title: 'Success', description: 'Website deleted successfully' })
-      loadSites()
+      toast({
+        title: 'Website Deleted',
+        description: 'The website has been deleted successfully'
+      })
+      await loadSites()
     } catch (error) {
-      handleError(error, 'deleting site')
+      handleError(error, 'deleting website')
     }
+  }
+
+  const handlePreviewSite = (site: Site) => {
+    const previewUrl = `/s/${site.slug}/`
+    window.open(previewUrl, '_blank')
   }
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="h-48 bg-gray-200 rounded"></div>
-            ))}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Website Builder</h1>
+            <p className="text-muted-foreground">Create and manage websites for the platform</p>
           </div>
+        </div>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="animate-pulse">
+              <CardHeader>
+                <div className="h-4 bg-muted rounded w-3/4"></div>
+                <div className="h-3 bg-muted rounded w-1/2"></div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-20 bg-muted rounded"></div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     )
   }
 
+  // Show template selector when requested
+  if (showTemplateSelector) {
+    return (
+      <TemplateSelector
+        onSelectTemplate={handleTemplateSelected}
+        onCancel={handleCancelWorkflow}
+      />
+    )
+  }
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Website Builder</h1>
+          <h1 className="text-3xl font-bold">
+            {mode === 'platform' ? 'Website Builder' : 'Company Website Editor'}
+          </h1>
           <p className="text-muted-foreground">
-            Create and manage your company websites
+            {mode === 'platform' 
+              ? 'Create and manage websites for the platform'
+              : 'Manage your company\'s public website'
+            }
           </p>
         </div>
-        <Button onClick={onCreateSite}>
+        <Button onClick={handleCreateWebsiteClick}>
           <Plus className="h-4 w-4 mr-2" />
-          Create Website
+          {mode === 'platform' ? 'Create Website' : 'Create Company Website'}
         </Button>
       </div>
 
+      {/* Sites Grid */}
       {sites.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <Globe className="h-12 w-12 text-muted-foreground mb-4" />
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-16 px-6 text-center">
+            <Globe className="h-12 w-12 text-muted-foreground/50 mb-4" />
             <h3 className="text-lg font-semibold mb-2">No websites yet</h3>
-            <p className="text-muted-foreground text-center mb-6">
-              Get started by creating your first website
+            <p className="text-muted-foreground mb-6 max-w-md">
+              Get started by creating your first website. Choose from our professional templates
+              and customize to match your brand.
             </p>
-            <Button onClick={onCreateSite}>
+            <Button onClick={handleCreateWebsiteClick}>
               <Plus className="h-4 w-4 mr-2" />
-              Create Your First Website
+              {mode === 'platform' ? 'Create Your First Website' : 'Create Company Website'}
             </Button>
           </CardContent>
         </Card>
@@ -103,82 +199,75 @@ function SitesList({ mode, onCreateSite }: { mode: 'platform' | 'company', onCre
           {sites.map((site) => (
             <Card key={site.id} className="group hover:shadow-md transition-shadow">
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">{site.name}</CardTitle>
-                  <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <CardTitle className="text-lg">{site.name}</CardTitle>
+                    <CardDescription className="flex items-center gap-2">
+                      <span>{site.slug}.renterinsight.com</span>
+                      {site.domain && (
+                        <Badge variant="secondary" className="text-xs">
+                          Custom Domain
+                        </Badge>
+                      )}
+                    </CardDescription>
+                  </div>
+                  <Badge variant={site.isPublished ? 'default' : 'secondary'}>
+                    {site.isPublished ? 'Published' : 'Draft'}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="text-sm text-muted-foreground">
+                    {site.pages?.length || 0} pages • Updated {new Date(site.updatedAt).toLocaleDateString()}
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
                       onClick={() => handleEditSite(site.id)}
+                      className="flex-1"
                     >
-                      <Edit className="h-4 w-4" />
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
                     </Button>
+                    
                     <Button
-                      variant="ghost"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePreviewSite(site)}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => handleDeleteSite(site.id)}
+                      className="text-destructive hover:text-destructive"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
-                </div>
-                <CardDescription>
-                  {site.slug}.{mode === 'platform' ? 'platform' : 'renterinsight'}.com
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="text-sm text-muted-foreground">
-                    {site.pages?.length || 0} pages
-                  </div>
-                  <Button 
-                    className="w-full" 
-                    onClick={() => handleEditSite(site.id)}
-                  >
-                    Edit Website
-                  </Button>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      {/* Site Details Modal */}
+      {showDetailsModal && selectedTemplate && (
+        <CreateSiteDetailsModal
+          template={selectedTemplate}
+          onCreateSite={handleCreateSite}
+          onBackToTemplates={handleBackToTemplateSelection}
+          onCancel={handleCancelWorkflow}
+        />
+      )}
     </div>
   )
 }
 
-export default function WebsiteBuilder({ mode = 'platform' }: WebsiteBuilderProps) {
-  const [showCreateModal, setShowCreateModal] = useState(false)
-
-  const handleSiteCreated = (site: Site) => {
-    // Refresh the sites list or navigate to editor
-    window.location.reload()
-  }
-
-  return (
-    <div className="space-y-6">
-      <Routes>
-        <Route 
-          path="/" 
-          element={
-            <SitesList 
-              mode={mode} 
-              onCreateSite={() => setShowCreateModal(true)} 
-            />
-          } 
-        />
-        <Route 
-          path="/:siteId" 
-          element={<SiteEditor mode={mode} />} 
-        />
-      </Routes>
-
-      <CreateSiteModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onSiteCreated={handleSiteCreated}
-        mode={mode}
-      />
-    </div>
-  )
-}
+export { WebsiteBuilder }
