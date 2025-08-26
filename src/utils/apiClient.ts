@@ -4,10 +4,10 @@ import { toast } from '@/hooks/use-toast'
 import { logger, measurePerformance } from '@/utils/logger';
 
 // Allow override via env for local/prod differences.
-// e.g. VITE_FUNCTIONS_BASE="http://localhost:8888/.netlify/functions"
+// e.g. VITE_FUNCTIONS_BASE="http://localhost:8888/api/netlify"
 const API_BASE: string =
   (import.meta as any)?.env?.VITE_FUNCTIONS_BASE ||
-  '/.netlify/functions'
+  '/api/netlify'
 
 interface ApiResponse<T = any> {
   data?: T

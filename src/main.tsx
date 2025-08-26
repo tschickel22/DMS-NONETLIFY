@@ -1,3 +1,4 @@
+import '../shared-core/netlifyCompat'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import * as pdfjs from 'pdfjs-dist'
